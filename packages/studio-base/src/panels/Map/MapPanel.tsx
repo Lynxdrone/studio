@@ -45,6 +45,7 @@ import {
   parseGeoJSON,
 } from "./support";
 import { MapPanelMessage, Point } from "./types";
+import L from "leaflet";
 
 type MapPanelProps = {
   context: PanelExtensionContext;
@@ -355,6 +356,12 @@ function MapPanel(props: MapPanelProps): JSX.Element {
     }
 
     const map = new LeafMap(mapContainerRef.current);
+
+    map.on("click", (e) => {
+      console.log(`Mouse pressed at: ${e.latlng.lat}, ${e.latlng.lng}`);
+      let markerPosition = e.latlng;
+      L.marker(markerPosition).addTo(map);
+    });
 
     // Remove default prefix from the attribution control
     map.attributionControl.setPrefix(false);
