@@ -21,7 +21,7 @@ import { useResizeDetector } from "react-resize-detector";
 import { useDebouncedCallback } from "use-debounce";
 
 import { filterMap } from "@foxglove/den/collection";
-import { toSec } from "@foxglove/rostime";
+import { toSec, fromDate } from "@foxglove/rostime";
 import {
   MessageEvent,
   PanelExtensionContext,
@@ -44,8 +44,9 @@ import {
   isValidMapMessage,
   parseGeoJSON,
 } from "./support";
-import { MapPanelMessage, Point } from "./types";
+import { MapPanelMessage, Point, NavSatFixPositionCovarianceType, NavSatFixStatus } from "./types";
 import L from "leaflet";
+import { start } from "@popperjs/core";
 
 type MapPanelProps = {
   context: PanelExtensionContext;
@@ -106,6 +107,7 @@ function MapPanel(props: MapPanelProps): JSX.Element {
   // We use state to trigger a render on the panel
   const [allMapMessages, setAllMapMessages] = useState<MapPanelMessage[]>([]);
   const [currentMapMessages, setCurrentMapMessages] = useState<MapPanelMessage[]>([]);
+  const [markerPosition, setMarkerPosition] = useState<{ lat: number; lng: number } | null>(null);
 
   const [allGeoMessages, allNavMessages] = useMemo(
     () => _.partition(allMapMessages, isGeoJSONMessage),
@@ -329,6 +331,56 @@ function MapPanel(props: MapPanelProps): JSX.Element {
     return topicLayerMap;
   }, [config.topicColors, eligibleTopics]);
 
+  useEffect(() => {
+    currentMap?.on("click", (e) => {
+      console.log(`Mouse pressed at: ${e.latlng.lat}, ${e.latlng.lng}`);
+      let markerPosition = e.latlng;
+      L.marker(markerPosition).addTo(currentMap);
+      let marker = L.marker(markerPosition);
+      marker.setTooltipContent("Initial Pose");
+      marker.addTo(currentMap);
+      setMarkerPosition({ lat: e.latlng.lat, lng: e.latlng.lng });
+    });
+  }, [currentMap]);
+
+  useLayoutEffect(() => {
+    context.advertise?.("start", "sensor_msgs/NavSatFix");
+
+    return () => {
+      context.unadvertise?.("start");
+    };
+  }, [context]);
+
+  useLayoutEffect(() => {
+    if (markerPosition) {
+      const time = fromDate(new Date());
+
+      const msg = {
+        header: { stamp: time, frame_id: 'start' },
+        status: NavSatFixStatus.STATUS_FIX,
+        latitude: markerPosition.lat,
+        longitude: markerPosition.lng,
+        altitude: 0,
+        position_covariance: [0, 0, 0, 0, 0, 0, 0, 0, 0],
+        position_covariance_type: NavSatFixPositionCovarianceType.COVARIANCE_TYPE_KNOWN,
+      };
+
+      const intervalMs = 1000;
+      context.publish?.('start', msg);
+
+      const intervalHandle = setInterval(() => {
+        console.log(msg);
+        context.publish?.('start', msg);
+        console.log('publishing');
+      }, intervalMs);
+
+      return () => {
+        clearInterval(intervalHandle);
+      };
+    }
+    return () => {};
+  }, [context, markerPosition]);
+
   useLayoutEffect(() => {
     if (!currentMap) {
       return;
@@ -356,12 +408,6 @@ function MapPanel(props: MapPanelProps): JSX.Element {
     }
 
     const map = new LeafMap(mapContainerRef.current);
-
-    map.on("click", (e) => {
-      console.log(`Mouse pressed at: ${e.latlng.lat}, ${e.latlng.lng}`);
-      let markerPosition = e.latlng;
-      L.marker(markerPosition).addTo(map);
-    });
 
     // Remove default prefix from the attribution control
     map.attributionControl.setPrefix(false);
@@ -696,7 +742,7 @@ function MapPanel(props: MapPanelProps): JSX.Element {
 
     // If center updates when following a topic we don't want to keep resetting the zoom.
     const zoom = didResetZoomRef.current ? currentMap?.getZoom() : config.zoomLevel ?? 10;
-    currentMap?.setView([center.lat, center.lon], zoom);
+    // currentMap?.setView([center.lat, center.lon], zoom);
     didResetZoomRef.current = true;
   }, [center, config.zoomLevel, currentMap]);
 
