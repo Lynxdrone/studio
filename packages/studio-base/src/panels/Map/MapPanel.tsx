@@ -17,7 +17,6 @@ import {
 import * as _ from "lodash-es";
 import memoizeWeak from "memoize-weak";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useResizeDetector } from "react-resize-detector";
 import { useDebouncedCallback } from "use-debounce";
 
 import { filterMap } from "@foxglove/den/collection";
@@ -29,7 +28,6 @@ import {
   Subscription,
   Topic,
 } from "@foxglove/studio";
-import Stack from "@foxglove/studio-base/components/Stack";
 import FilteredPointLayer, {
   POINT_MARKER_RADIUS,
 } from "@foxglove/studio-base/panels/Map/FilteredPointLayer";
@@ -46,7 +44,6 @@ import {
 } from "./support";
 import { MapPanelMessage, Point, NavSatFixPositionCovarianceType, NavSatFixStatus } from "./types";
 import L from "leaflet";
-import { start } from "@popperjs/core";
 
 type MapPanelProps = {
   context: PanelExtensionContext;
@@ -126,27 +123,6 @@ function MapPanel(props: MapPanelProps): JSX.Element {
   const [previewTime, setPreviewTime] = useState<number | undefined>();
 
   const [currentMap, setCurrentMap] = useState<LeafMap | undefined>(undefined);
-
-  // Use a debounce and 0 refresh rate to avoid triggering a resize observation while handling
-  // an existing resize observation.
-  // https://github.com/maslianok/react-resize-detector/issues/45
-  const {
-    width: panelWidth,
-    height: panelHeight,
-    ref: sizeRef,
-  } = useResizeDetector({
-    refreshRate: 0,
-    refreshMode: "debounce",
-  });
-
-  useEffect(() => {
-    // We depend on changes in the resized panel dimensions to tell the Leaflet map to
-    // recalculate its size. We do this inside a separate useEffect instead of directly
-    // in the map's change callbacks to avoid a react error from calling setState
-    // during a render.
-    void { panelWidth, panelHeight };
-    currentMap?.invalidateSize();
-  }, [panelWidth, panelHeight, currentMap]);
 
   // panel extensions must notify when they've completed rendering
   // onRender will setRenderDone to a done callback which we can invoke after we've rendered
@@ -739,9 +715,6 @@ function MapPanel(props: MapPanelProps): JSX.Element {
     if (!center) {
       return;
     }
-
-    // If center updates when following a topic we don't want to keep resetting the zoom.
-    const zoom = didResetZoomRef.current ? currentMap?.getZoom() : config.zoomLevel ?? 10;
     // currentMap?.setView([center.lat, center.lon], zoom);
     didResetZoomRef.current = true;
   }, [center, config.zoomLevel, currentMap]);
@@ -752,27 +725,15 @@ function MapPanel(props: MapPanelProps): JSX.Element {
   }, [renderDone]);
 
   return (
-    <Stack ref={sizeRef} fullHeight fullWidth position="relative">
-      {!center && (
-        <Stack
-          alignItems="center"
-          justifyContent="center"
-          position="absolute"
-          style={{ top: 0, right: 0, bottom: 0, left: 0 }}
-        >
-          Waiting for first GPS point...
-        </Stack>
-      )}
-      <Stack
-        position="absolute"
-        ref={mapContainerRef}
-        style={{
-          inset: 0,
-          cursor: "auto",
-          visibility: center ? "visible" : "hidden",
-        }}
-      />
-    </Stack>
+    <div
+      ref={mapContainerRef}
+      style={{
+        position: "absolute",
+        inset: 0,
+        cursor: "auto",
+        visibility: center ? "visible" : "hidden",
+      }}
+    />
   );
 }
 
