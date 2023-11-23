@@ -30,7 +30,7 @@ import {
 } from "@foxglove/studio";
 import FilteredPointLayer, {
   POINT_MARKER_RADIUS,
-} from "@foxglove/studio-base/panels/Map/FilteredPointLayer";
+} from "./FilteredPointLayer";
 import { darkColor, lightColor, lineColors } from "@foxglove/studio-base/util/plotColors";
 
 import { buildSettingsTree, Config, validateCustomUrl } from "./config";
